@@ -1,0 +1,105 @@
+# Единственный workflow проекта. Запускается ТОЛЬКО на pull_request
+# (никаких push / workflow_dispatch / schedule). Один job — один прогон на событие PR.
+# Статические проверки, сборка Tailwind и pytest на PostgreSQL 17 (service-контейнер).
+# Playwright (e2e и скриншоты) в CI не запускается — только локально, см. docs/testing.md.
+name: ci
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Static checks + Tailwind + pytest (PostgreSQL 17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: django_shop
+          POSTGRES_USER: shop
+          # Без пароля: одноразовый контейнер CI доступен только job'у.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shop -d django_shop"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    env:
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: '5432'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks проверяет всю историю
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: No secrets, var/ or .env in the repository
+        run: docker/check-repo.sh
+
+      - name: gitleaks (full history)
+        env:
+          GITLEAKS_VERSION: 8.28.0
+          GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --redact --no-banner --exit-code 1
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Install Node dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate local secrets (var/, not committed)
+        run: docker/secrets.sh
+
+      - name: ruff format
+        run: ruff format --check .
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: mypy (django-stubs)
+        run: mypy .
+
+      - name: manage.py check
+        run: python manage.py check
+
+      - name: Migrations are up to date
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Build Tailwind CSS
+        run: npm run build:css
+
+      - name: TypeScript (e2e) typecheck
+        run: npm run types:check
+
+      - name: pytest (PostgreSQL 17)
+        run: pytest -p no:cacheprovider
