@@ -1,0 +1,15 @@
+{% if messages %}
+<div class="mb-6 space-y-2">
+    {% for message in messages %}
+        {% if message.level_tag == 'success' %}
+            <div class="alert border-green-200 bg-green-50 text-green-800" role="status" data-testid="flash-success">{{ message }}</div>
+        {% elif message.level_tag == 'error' %}
+            <div class="alert border-red-200 bg-red-50 text-red-800" role="alert" data-testid="flash-error">{{ message }}</div>
+        {% elif message.level_tag == 'warning' %}
+            <div class="alert border-amber-200 bg-amber-50 text-amber-800" role="alert" data-testid="flash-warning">{{ message }}</div>
+        {% else %}
+            <div class="alert border-blue-200 bg-blue-50 text-blue-800" role="status" data-testid="flash-info">{{ message }}</div>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endif %}

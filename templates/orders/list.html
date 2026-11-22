@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load shop %}
+{% block title %}Мои заказы{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-2">
+    <h1>Мои заказы</h1>
+    <a href="{% url 'accounts:profile' %}" class="text-sm text-neutral-600 hover:underline">Профиль</a>
+</div>
+{% if has_any %}
+<form method="get" class="card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(11rem,1fr)_10rem_8.75rem_8.75rem_11.5rem_auto] lg:items-end">
+    <div>
+        <label for="id_q" class="label">Поиск</label>
+        <input type="search" name="q" id="id_q" value="{{ filter.form.q.value|default_if_none:'' }}" placeholder="№ заказа или товар" class="input" data-testid="orders-search">
+    </div>
+    <div>
+        <label for="id_status" class="label">Статус</label>
+        {{ filter.form.status|input_widget }}
+    </div>
+    <div>
+        <label for="id_date_from" class="label">С даты</label>
+        {{ filter.form.date_from|input_widget }}
+    </div>
+    <div>
+        <label for="id_date_to" class="label">По дату</label>
+        {{ filter.form.date_to|input_widget }}
+    </div>
+    <div>
+        <label for="id_ordering" class="label">Сортировка</label>
+        <select name="ordering" id="id_ordering" class="input" data-testid="orders-sort" data-autosubmit>
+            {% for value, label in sort_choices %}<option value="{{ value }}" {% if current_sort.0 == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="flex gap-2">
+        <button type="submit" class="btn-primary flex-1">Применить</button>
+        {% if has_filters %}<a href="{% url 'orders:list' %}" class="btn-outline">Сбросить</a>{% endif %}
+    </div>
+</form>
+<p class="mb-3 text-sm text-neutral-500" data-testid="orders-total">Найдено: {{ page_obj.paginator.count }} {{ page_obj.paginator.count|plural_ru:"заказ,заказа,заказов" }}</p>
+{% if orders %}
+<ul class="space-y-3">
+    {% for order in orders %}
+    <li data-testid="order-row">
+        <a href="{{ order.get_absolute_url }}" class="card flex flex-wrap items-center gap-x-6 gap-y-2 p-4 hover:border-neutral-300">
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium">Заказ №{{ order.pk }}</span>
+                    <span class="{% status_class order.status %}" data-testid="order-status">{{ order.get_status_display }}</span>
+                </div>
+                <p class="mt-1 truncate text-sm text-neutral-500">{% for item in order.items.all %}{{ item.product_name }} × {{ item.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+            </div>
+            <div class="text-right">
+                <p class="font-semibold whitespace-nowrap">{{ order.total|rub }}</p>
+                <p class="text-xs text-neutral-500">{{ order.created_at|date:"d.m.Y H:i" }}</p>
+            </div>
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% include "includes/pagination.html" %}
+{% else %}
+<div class="card p-10 text-center" data-testid="no-results"><p class="font-medium">Ничего не найдено</p><a href="{% url 'orders:list' %}" class="btn-outline mt-4">Сбросить фильтры</a></div>
+{% endif %}
+{% else %}
+<div class="card p-10 text-center">
+    <p class="font-medium">Заказов пока нет.</p>
+    <a href="{% url 'catalog:index' %}" class="btn-primary mt-4">В каталог</a>
+</div>
+{% endif %}
+{% endblock %}

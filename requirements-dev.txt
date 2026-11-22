@@ -1,0 +1,8 @@
+# Тесты и статические проверки. Установка: pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.2.0
+pytest-django==4.14.0
+factory_boy==3.3.3
+ruff==0.17.6
+mypy==1.19.1
+django-stubs==5.2.9
