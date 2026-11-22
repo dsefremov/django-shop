@@ -1,0 +1,25 @@
+# Секреты и локальные данные — только вне git (генерирует docker/secrets.sh)
+/var/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Сборка
+/static/css/app.css
+/staticfiles/
+/media/
+node_modules/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/

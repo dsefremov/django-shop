@@ -1,0 +1,7 @@
+# Зависимости приложения (точные версии). Установка: pip install -r requirements.txt
+Django==5.2.19
+django-filter==26.2
+django-stubs-ext==5.2.9  # monkeypatch() для generic-аннотаций (ModelAdmin[Model] и т. п.)
+gunicorn==27.0.1
+pillow==13.0.0
+psycopg[binary]==3.3.9

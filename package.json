@@ -1,0 +1,23 @@
+{
+    "name": "django-shop",
+    "private": true,
+    "license": "UNLICENSED",
+    "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "build:css": "tailwindcss -i assets/css/app.css -o static/css/app.css --minify",
+        "watch:css": "tailwindcss -i assets/css/app.css -o static/css/app.css --watch",
+        "types:check": "tsc --noEmit",
+        "test:e2e": "playwright test --project=e2e",
+        "screenshots": "playwright test --project=screenshots"
+    },
+    "devDependencies": {
+        "@playwright/test": "1.65.0",
+        "@tailwindcss/cli": "4.3.5",
+        "@types/node": "^22.13.5",
+        "tailwindcss": "4.3.5",
+        "typescript": "^5.7.2"
+    }
+}

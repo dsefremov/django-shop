@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load shop %}
+{% block title %}{% if category %}{{ category.name }}{% else %}Каталог{% endif %}{% endblock %}
+{% block content %}
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+    <aside class="min-w-0 space-y-4">
+        <nav aria-label="Категории">
+            <h2 class="mb-2 text-sm font-semibold">Категории</h2>
+            <ul class="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+                <li><a href="{% url 'catalog:index' %}" class="flex items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap {% if not category %}bg-neutral-200/70 font-medium{% else %}hover:bg-neutral-100{% endif %}">Все товары <span class="text-xs text-neutral-400">{{ all_count }}</span></a></li>
+                {% for cat in categories %}
+                <li><a href="{{ cat.get_absolute_url }}" class="flex items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap {% if category.pk == cat.pk %}bg-neutral-200/70 font-medium{% else %}hover:bg-neutral-100{% endif %}">{{ cat.name }} <span class="text-xs text-neutral-400">{{ cat.product_count }}</span></a></li>
+                {% endfor %}
+            </ul>
+        </nav>
+
+        <form method="get" class="card space-y-3 p-4" data-testid="catalog-filters">
+            <h2 class="flex items-center gap-2 text-sm font-semibold">
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+                Фильтр
+            </h2>
+            {% if filter.form.q.value %}<input type="hidden" name="q" value="{{ filter.form.q.value }}">{% endif %}
+            {% if filter.form.ordering.value %}<input type="hidden" name="ordering" value="{{ current_sort|join:',' }}">{% endif %}
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label for="id_price_min" class="mb-1 block text-xs text-neutral-500">Цена от, ₽</label>
+                    <input type="number" name="price_min" id="id_price_min" min="0" step="1" class="input" value="{{ filter.form.price_min.value|default_if_none:'' }}" placeholder="{{ price_range.min|floatformat:0 }}">
+                </div>
+                <div>
+                    <label for="id_price_max" class="mb-1 block text-xs text-neutral-500">до, ₽</label>
+                    <input type="number" name="price_max" id="id_price_max" min="0" step="1" class="input" value="{{ filter.form.price_max.value|default_if_none:'' }}" placeholder="{{ price_range.max|floatformat:0 }}">
+                </div>
+            </div>
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="in_stock" value="true" class="size-4 rounded border-neutral-300" {% if filter.form.cleaned_data.in_stock %}checked{% endif %}>
+                Только в наличии
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+                <button type="submit" class="btn-primary btn-sm py-2" data-testid="apply-filters">Применить</button>
+                <a href="{% if category %}{{ category.get_absolute_url }}{% else %}{% url 'catalog:index' %}{% endif %}" class="btn-outline btn-sm py-2">Сбросить</a>
+            </div>
+        </form>
+    </aside>
+
+    <section class="min-w-0">
+        <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+            <div>
+                <h1>{% if category %}{{ category.name }}{% else %}Каталог{% endif %}</h1>
+                <p class="mt-1 text-sm text-neutral-500">{% if category %}{{ category.description }}{% else %}Все товары магазина. Цены указаны в рублях.{% endif %}</p>
+            </div>
+            <p class="text-sm text-neutral-500" data-testid="catalog-total">Найдено: {{ page_obj.paginator.count }} {{ page_obj.paginator.count|plural_ru:"товар,товара,товаров" }}</p>
+        </div>
+
+        <form method="get" class="mb-4 flex flex-col gap-2 sm:flex-row" role="search">
+            {% if filter.form.cleaned_data.price_min is not None %}<input type="hidden" name="price_min" value="{{ filter.form.price_min.value }}">{% endif %}
+            {% if filter.form.cleaned_data.price_max is not None %}<input type="hidden" name="price_max" value="{{ filter.form.price_max.value }}">{% endif %}
+            {% if filter.form.cleaned_data.in_stock %}<input type="hidden" name="in_stock" value="true">{% endif %}
+            <div class="relative flex-1">
+                <svg class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                <input type="search" name="q" value="{{ filter.form.q.value|default_if_none:'' }}" placeholder="Поиск по названию и описанию" aria-label="Поиск" class="input pl-9" data-testid="catalog-search">
+            </div>
+            <div class="flex gap-2">
+                <select name="ordering" aria-label="Сортировка" class="input flex-1 sm:w-48" data-testid="catalog-sort" data-autosubmit>
+                    {% for value, label in sort_choices %}
+                    <option value="{{ value }}" {% if current_sort.0 == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn-outline">Найти</button>
+            </div>
+        </form>
+
+        {% if products %}
+        <ul class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+            {% for product in products %}
+            <li class="card flex flex-col overflow-hidden" data-testid="product-card">
+                <a href="{{ product.get_absolute_url }}" class="block aspect-[4/3] overflow-hidden bg-neutral-100" tabindex="-1" aria-hidden="true">
+                    {% if product.image %}<img src="{{ product.image.url }}" alt="" class="size-full object-cover" loading="lazy" width="400" height="300">{% endif %}
+                </a>
+                <div class="flex flex-1 flex-col p-3">
+                    <p class="text-xs text-neutral-500">{{ product.category.name }}</p>
+                    <h3 class="mt-1 text-sm leading-snug font-medium"><a href="{{ product.get_absolute_url }}" class="hover:underline">{{ product.name }}</a></h3>
+                    <div class="mt-auto pt-3">
+                        <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+                            <p class="font-semibold whitespace-nowrap">{{ product.price|rub }}</p>
+                            {% if product.in_stock %}
+                                <p class="text-xs whitespace-nowrap text-green-700">В наличии: {{ product.stock }} шт.</p>
+                            {% else %}
+                                <p class="text-xs whitespace-nowrap text-red-600">Нет в наличии</p>
+                            {% endif %}
+                        </div>
+                        <form method="post" action="{% url 'cart:add' product.pk %}" class="mt-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="quantity" value="1">
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button type="submit" class="btn-primary btn-sm w-full" {% if not product.in_stock %}disabled{% endif %} aria-label="В корзину: {{ product.name }}">
+                                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.7 12.4a1 1 0 001 .8h9.7a1 1 0 001-.8L21 7H6"/></svg>
+                                В корзину
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% include "includes/pagination.html" %}
+        {% else %}
+        <div class="card p-10 text-center" data-testid="no-results">
+            <p class="font-medium">Ничего не найдено</p>
+            <p class="mt-1 text-sm text-neutral-500">Измените запрос или сбросьте фильтры.</p>
+            <a href="{% if category %}{{ category.get_absolute_url }}{% else %}{% url 'catalog:index' %}{% endif %}" class="btn-outline mt-4" data-testid="no-results-reset">Сбросить</a>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
