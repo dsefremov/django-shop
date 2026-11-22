@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-sm">
+    <h1 class="mb-1">Вход</h1>
+    <p class="mb-6 text-sm text-neutral-500">Нет аккаунта? <a href="{% url 'accounts:register' %}{% if next %}?next={{ next|urlencode }}{% endif %}" class="font-medium text-neutral-900 underline">Зарегистрируйтесь</a></p>
+    <form method="post" class="card space-y-4 p-6" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        {% for error in form.non_field_errors %}<p class="alert border-red-200 bg-red-50 text-red-800" role="alert">{{ error }}</p>{% endfor %}
+        {% include "includes/field.html" with field=form.username %}
+        {% include "includes/field.html" with field=form.password %}
+        <button type="submit" class="btn-primary w-full">Войти</button>
+    </form>
+</div>
+{% endblock %}

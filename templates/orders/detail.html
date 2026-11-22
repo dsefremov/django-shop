@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load shop %}
+{% block title %}Заказ №{{ order.pk }}{% endblock %}
+{% block content %}
+<a href="{% url 'orders:list' %}" class="text-sm text-neutral-500 hover:underline">← Мои заказы</a>
+<div class="mt-2 mb-6 flex flex-wrap items-center gap-3">
+    <h1>Заказ №{{ order.pk }}</h1>
+    <span class="{% status_class order.status %}" data-testid="order-status">{{ order.get_status_display }}</span>
+</div>
+<div class="grid gap-6 lg:grid-cols-[1fr_20rem]">
+    <div class="space-y-6">
+        <section class="card">
+            <h2 class="border-b border-neutral-200 px-4 py-3 font-semibold">Товары</h2>
+            <ul class="divide-y divide-neutral-100">
+                {% for item in order.items.all %}
+                <li class="flex justify-between gap-4 px-4 py-3 text-sm">
+                    <div><p>{{ item.product_name }}</p><p class="text-xs text-neutral-500">{{ item.price|rub }} × {{ item.quantity }}</p></div>
+                    <span class="font-medium whitespace-nowrap">{{ item.line_total|rub }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <div class="flex justify-between border-t border-neutral-200 px-4 py-3">
+                <span class="font-semibold">Итого</span>
+                <span class="font-semibold" data-testid="order-total">{{ order.total|rub }}</span>
+            </div>
+        </section>
+        <section class="card p-4 text-sm">
+            <h2 class="mb-2 font-semibold">Получатель и доставка</h2>
+            <p>{{ order.customer_name }}</p>
+            <p class="text-neutral-600">{{ order.customer_phone }} · {{ order.customer_email }}</p>
+            <p class="text-neutral-600">{{ order.address }}</p>
+            {% if order.comment %}<p class="mt-2 text-neutral-600">Комментарий: {{ order.comment }}</p>{% endif %}
+            <p class="mt-3 text-xs text-neutral-400">Оформлен: {{ order.created_at|date:"d.m.Y H:i" }}{% if order.paid_at %} · оплачен: {{ order.paid_at|date:"d.m.Y H:i" }}{% endif %}</p>
+        </section>
+    </div>
+    <aside class="space-y-6">
+        <section class="card p-4 text-sm">
+            <h2 class="mb-2 font-semibold">Оплата</h2>
+            <p class="text-neutral-600">Способ оплаты: <span class="text-neutral-900">Тестовая оплата</span></p>
+            {% if order.status == 'payment_declined' %}
+                <p class="mt-3 rounded-md bg-red-50 px-3 py-2 text-red-800" data-testid="payment-declined">Последняя попытка оплаты отклонена. Товар зарезервирован — можно оплатить ещё раз.</p>
+            {% endif %}
+            {% if order.is_payable %}
+                <p class="mt-3 text-neutral-600">Деньги не списываются: «Оплатить» — оплата пройдёт, «Отказ» — смоделировать отклонённый платёж.</p>
+                <form method="post" action="{% url 'orders:pay' order.pk %}" class="mt-3 flex gap-2">
+                    {% csrf_token %}
+                    <button type="submit" name="decision" value="pay" class="btn-primary flex-1" data-testid="pay-button">{% if order.status == 'payment_declined' %}Оплатить ещё раз{% else %}Оплатить{% endif %}</button>
+                    <button type="submit" name="decision" value="decline" class="btn-outline" data-testid="decline-button">Отказ</button>
+                </form>
+            {% elif order.paid_at %}
+                <p class="mt-3 text-green-700">Заказ оплачен {{ order.paid_at|date:"d.m.Y H:i" }}.</p>
+            {% endif %}
+            {% if order.can_cancel %}
+                <form method="post" action="{% url 'orders:cancel' order.pk %}" class="mt-3 border-t border-neutral-100 pt-3">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-danger btn-sm w-full" data-testid="cancel-button">Отменить заказ</button>
+                </form>
+            {% endif %}
+        </section>
+        {% with attempts=order.payment_attempts.all %}
+        {% if attempts %}
+        <section class="card p-4 text-sm">
+            <h2 class="mb-2 font-semibold">История оплаты</h2>
+            <ol class="space-y-2">
+                {% for attempt in attempts %}
+                <li class="flex items-start justify-between gap-2" data-testid="payment-attempt">
+                    <div><p class="{% if attempt.succeeded %}text-green-700{% else %}text-red-700{% endif %}">{% if attempt.succeeded %}Успешно{% else %}Отказ{% endif %}</p><p class="text-xs text-neutral-500">{{ attempt.reference }}</p></div>
+                    <span class="text-xs whitespace-nowrap text-neutral-500">{{ attempt.created_at|date:"d.m.Y H:i" }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+        {% endif %}
+        {% endwith %}
+    </aside>
+</div>
+{% endblock %}
