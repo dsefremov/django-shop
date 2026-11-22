@@ -1,0 +1,149 @@
+# Локальное окружение Django Shop: PostgreSQL 17, Django (Gunicorn) за nginx.
+# Все сервисы в network_mode: host — на машине разработки firewall режет трафик между
+# контейнерами в новых bridge-сетях, поэтому сервисы общаются через 127.0.0.1 и свои порты.
+# Порты по умолчанию: сайт (nginx) 8098, Gunicorn 8099, PostgreSQL 54317, тестовый PostgreSQL 54318
+# (переопределяются HTTP_PORT, APP_PORT, DB_PORT, TEST_DB_PORT).
+# Паролей в этом файле нет: их генерирует docker/secrets.sh в var/ (вне git), PostgreSQL читает
+# POSTGRES_PASSWORD_FILE, Django — *_FILE из окружения.
+name: djangoshop
+
+x-django-env: &django-env
+    DJANGO_SECRET_KEY_FILE: /run/secrets/secret_key
+    DB_PASSWORD_FILE: /run/secrets/db_password
+    DB_HOST: 127.0.0.1
+    DB_PORT: '${DB_PORT:-54317}'
+    DB_NAME: django_shop
+    DB_USER: shop
+    DJANGO_ALLOWED_HOSTS: '127.0.0.1,localhost'
+    DJANGO_STATIC_ROOT: /app/staticfiles
+    DJANGO_MEDIA_ROOT: /app/media
+
+services:
+    db:
+        image: 'postgres:17'
+        network_mode: host
+        command: ['postgres', '-p', '${DB_PORT:-54317}', '-c', 'listen_addresses=127.0.0.1']
+        environment:
+            POSTGRES_DB: django_shop
+            POSTGRES_USER: shop
+            POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+            PGPORT: '${DB_PORT:-54317}'
+        secrets: [db_password]
+        volumes:
+            - 'pg-data:/var/lib/postgresql/data'
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p ${DB_PORT:-54317} -U shop -d django_shop']
+            interval: 2s
+            timeout: 5s
+            retries: 60
+
+    # Отдельный сервер для pytest (данные в tmpfs, без fsync — только для тестов).
+    test-db:
+        image: 'postgres:17'
+        network_mode: host
+        command:
+            ['postgres', '-p', '${TEST_DB_PORT:-54318}', '-c', 'listen_addresses=127.0.0.1', '-c', 'fsync=off', '-c', 'synchronous_commit=off', '-c', 'full_page_writes=off']
+        environment:
+            POSTGRES_DB: django_shop
+            POSTGRES_USER: shop
+            POSTGRES_PASSWORD_FILE: /run/secrets/test_db_password
+            PGPORT: '${TEST_DB_PORT:-54318}'
+        secrets: [test_db_password]
+        tmpfs:
+            - /var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p ${TEST_DB_PORT:-54318} -U shop -d django_shop']
+            interval: 2s
+            timeout: 5s
+            retries: 60
+
+    web:
+        build:
+            context: .
+            target: app
+            args:
+                UID: '${UID:-1000}'
+                GID: '${GID:-1000}'
+        image: djangoshop-web:latest
+        network_mode: host
+        environment:
+            <<: *django-env
+            APP_PORT: '${APP_PORT:-8099}'
+            DEMO_USERS_FILE: /run/secrets/demo_users
+            ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+        secrets: [db_password, secret_key, demo_users, admin_password]
+        volumes:
+            - 'static:/app/staticfiles'
+            - 'media:/app/media'
+        depends_on:
+            db:
+                condition: service_healthy
+        healthcheck:
+            test: ['CMD', 'python', '-c', 'import os, urllib.request; urllib.request.urlopen("http://127.0.0.1:%s/accounts/login/" % os.environ["APP_PORT"], timeout=3)']
+            interval: 3s
+            timeout: 5s
+            retries: 40
+
+    nginx:
+        image: 'nginx:1.27-alpine'
+        network_mode: host
+        environment:
+            HTTP_PORT: '${HTTP_PORT:-8098}'
+            APP_PORT: '${APP_PORT:-8099}'
+            NGINX_ENVSUBST_FILTER: '^(HTTP_PORT|APP_PORT)$$'
+        volumes:
+            - './docker/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro'
+            - 'static:/srv/static:ro'
+            - 'media:/srv/media:ro'
+        depends_on:
+            web:
+                condition: service_healthy
+
+    # Тесты и статпроверки (pytest, ruff, mypy): docker compose run --rm tools <команда>.
+    # Код монтируется томом, пароль тестовой БД — var/secrets/test-db-password.
+    tools:
+        build:
+            context: .
+            target: dev
+            args:
+                UID: '${UID:-1000}'
+                GID: '${GID:-1000}'
+        image: djangoshop-tools:latest
+        network_mode: host
+        working_dir: /app
+        environment:
+            TEST_DB_PORT: '${TEST_DB_PORT:-54318}'
+            MYPY_CACHE_DIR: /tmp/mypy-cache
+            RUFF_CACHE_DIR: /tmp/ruff-cache
+        volumes:
+            - '.:/app'
+        profiles: ['tools']
+
+    # Сборка Tailwind на хосте без локального Node: docker compose run --rm node npm run build:css
+    node:
+        image: 'node:22'
+        network_mode: host
+        user: '${UID:-1000}:${GID:-1000}'
+        working_dir: /app
+        environment:
+            npm_config_cache: /tmp/npm-cache
+        volumes:
+            - '.:/app'
+        profiles: ['tools']
+
+secrets:
+    db_password:
+        file: ./var/secrets/db-password
+    test_db_password:
+        file: ./var/secrets/test-db-password
+    secret_key:
+        file: ./var/secrets/secret-key
+    demo_users:
+        file: ./var/demo-users.json
+    admin_password:
+        file: ./var/admin-password
+
+volumes:
+    pg-data:
+    static:
+    media:
