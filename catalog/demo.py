@@ -16,13 +16,14 @@ from typing import TypedDict
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.core.files.base import ContentFile
-from django.db import transaction
+from django.core.management.color import no_style
+from django.db import connection, transaction
 from django.utils import timezone
 
 from accounts.models import User
 from accounts.roles import MANAGERS_GROUP, ensure_managers_group
 from cart.models import CartItem
-from orders.models import Order, OrderStatus
+from orders.models import Order, OrderItem, OrderStatus, PaymentAttempt
 from orders.services import CheckoutData, pay, place_order, set_status
 
 from .models import Category, Product
@@ -121,6 +122,11 @@ def purge() -> None:
     for category in Category.objects.all():
         category.image.delete(save=False)
     Category.objects.all().delete()
+    # Номера заказов и id товаров снова с 1 — как на чистой установке (иначе №50 после десятка перезагрузок).
+    models = [Order, OrderItem, PaymentAttempt, CartItem, Product, Category]
+    with connection.cursor() as cursor:
+        for sql in connection.ops.sequence_reset_sql(no_style(), models):
+            cursor.execute(sql)
 
 
 @transaction.atomic
@@ -188,8 +194,8 @@ def load(credentials_file: Path | None = None) -> dict[str, int]:
     customer, maria = users["customer"], users["maria"]
     _order(customer, [(products[0], 1), (products[8], 2)], "completed", timedelta(days=10))
     _order(customer, [(products[13], 1)], "paid", timedelta(days=3))
-    _order(customer, [(products[19], 1), (products[22], 2)], "new", timedelta(days=1))
     _order(maria, [(products[3], 1)], "paid", timedelta(days=2))
+    _order(customer, [(products[19], 1), (products[22], 2)], "new", timedelta(days=1))
     _order(maria, [(products[15], 1)], "declined", timedelta(hours=5))
 
     return {

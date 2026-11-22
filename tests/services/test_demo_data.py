@@ -50,6 +50,9 @@ def test_seed_loads_same_dataset_as_other_shops(demo_users: dict[str, dict[str, 
     assert manager.groups.filter(name=MANAGERS_GROUP).exists()
 
     assert Order.objects.count() == 5
+    # повторная загрузка начинает нумерацию заново, как чистая установка
+    assert sorted(Order.objects.values_list("pk", flat=True)) == [1, 2, 3, 4, 5]
+    assert min(Product.objects.values_list("pk", flat=True)) == 1
     assert sorted(customer.orders.values_list("status", flat=True)) == sorted(
         [OrderStatus.COMPLETED, OrderStatus.PAID, OrderStatus.NEW]
     )
